@@ -24,7 +24,7 @@ class LSTM_model(nn.Module):
         h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size) 
         c0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size) 
         out, _ = self.lstm(x, (h0, c0))
-        out = self.relu(out) 
+        #out = self.relu(out) 
         out = out[:, -self.pred_len:, :] 
         out = self.fc(out) 
         return out 

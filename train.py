@@ -12,10 +12,9 @@ def set_seed(seed=42):
     torch.manual_seed(seed=seed) 
     np.random.seed(seed=seed)
     random.seed(seed) 
+set_seed()
 
-set_seed 
-
-# loading the data and setting up 
+# loading the data and getting familiar
 file_path = "/home/ahmad_rahmani/Github_Repositories/multivariate_lstm/BTC-USD.csv" 
 df = pd.read_csv(file_path) 
 df['Date'] = pd.to_datetime(df['Date']) 
@@ -25,7 +24,7 @@ print(df.head(5))
 data = df.to_numpy() 
 print("Data shape: ",data.shape)
 
-# plots 
+# plotting the labels
 plt.plot(data[:,3]) 
 plt.xlabel("Time") 
 plt.ylabel("price [USD]")  
@@ -39,9 +38,10 @@ data = scaler.fit_transform(data)
 # generating the time series sequence, and obtaining the features and labels tensors
 lookback_period = 50  
 prediction_length = 10
+label_column = 3 #4th column is the labels
 features, labels = data_setup.sequence_generator(timeseries=data, lookback_period=lookback_period, 
-                                                 pred_length=prediction_length) 
-print('Features shape: ',features.shape) 
+                                                 pred_length=prediction_length, label_column=label_column) 
+print('Features shape: ',features.shape)  # from here we are in tensor domain 
 print('Labels shape: ',labels.shape) 
 
 # train, validation and testing split 
@@ -67,12 +67,20 @@ for X_batch, y_batch in train_dataloder:
     break 
 
 # instantiating an instance of the model class 
-input_size = 5 
-hidden_size = 80 
-num_layers = 1 
-output_size = 1 
+input_size = 5 # number of features
+hidden_size = 80  # number of hidden units in an LSTM layer
+num_layers = 1  # number of LSTM layers
+output_size = 1 # number of predicted variables, here "Close" only
 prediction_length = 10 
+torch.manual_seed(seed=42)
 LSTM_nn = model.LSTM_model(input_size=input_size, hidden_size=hidden_size, num_layers=num_layers, output_size=output_size, pred_len=prediction_length) 
+
+# model output shape !! 
+input = torch.randn(32,50,5)
+LSTM_nn.eval() 
+with torch.inference_mode(): 
+    output = LSTM_nn(input)
+print('Output shape: ', output.shape) 
 
 # creating loss functions and optimizer 
 loss_fn = torch.nn.MSELoss() 
@@ -84,3 +92,54 @@ model_name_LSTM = "LSTM_model"
 training_epochs_LSTM = 20 
 training_results_LSTM = engine.train_model(model=LSTM_nn, train_dataloader=train_dataloder, valid_dataloader=validation_dataloader,
                                       optimizer=optimizer_LSTM, loss_fn=loss_fn, epochs=training_epochs_LSTM, model_name=model_name_LSTM) 
+
+# testing LSTM 
+test_results_LSTM, test_predictions, tests  = engine.test_step(model=LSTM_nn, dataloader=testing_dataloader, loss_fn=loss_fn) 
+print("prediction tensor shape:", test_predictions.shape) 
+print("test tensor shape: ", tests.shape)
+
+# plot of the testing results  
+# Convert torch tensors to numpy arrays first
+preds = test_predictions.numpy()  # shape: (404, 10)
+trues = tests.numpy()            # shape: (404, 10) 
+# Flatten the 2D array into shape (404 * 10, ) # to have all the predictions as a single vector
+preds_flat = preds.reshape(-1, 1)
+trues_flat = trues.reshape(-1, 1)
+# Prepare dummy 5D data for inverse transform
+# We'll insert our close prices in column index 3 (the 'Close' column)
+dummy_preds = np.zeros((preds_flat.shape[0], 5))
+dummy_trues = np.zeros((trues_flat.shape[0], 5))
+dummy_preds[:, label_column] = preds_flat[:, 0]  # column index 3 = 'Close'
+dummy_trues[:, label_column] = trues_flat[:, 0]
+# Perform inverse transform
+inv_preds = scaler.inverse_transform(dummy_preds)[:, 3]  # extract only the 'Close' column
+inv_trues = scaler.inverse_transform(dummy_trues)[:, 3]
+# Reshape to original prediction shape (N, 10)
+inv_preds = inv_preds.reshape(preds.shape)
+inv_trues = inv_trues.reshape(trues.shape)
+
+# averaging alignment strategy
+total_len = inv_preds.shape[0] + inv_preds.shape[1]
+pred_series = np.zeros((total_len,))
+true_series = np.zeros((total_len,))
+count = np.zeros((total_len,))
+for i in range(inv_preds.shape[0]):
+    start_idx = i
+    end_idx = i + prediction_length
+    pred_series[start_idx:end_idx] += inv_preds[i]
+    true_series[start_idx:end_idx] += inv_trues[i]
+    count[start_idx:end_idx] += 1
+count[count == 0] = 1
+pred_series /= count
+true_series /= count
+
+# Plot
+plt.figure(figsize=(14, 5))
+plt.plot(true_series, label="True (USD)")
+plt.plot(pred_series, label="Predicted (USD)")
+plt.legend()
+plt.title("Predicted vs True Close Prices (Inverse Transformed)")
+plt.xlabel("Time steps")
+plt.ylabel("Price [USD]")
+plt.grid(True)
+plt.show()

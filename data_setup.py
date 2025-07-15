@@ -5,12 +5,12 @@ import pandas as pd
 import numpy as np
 import torch 
 from torch.utils.data import TensorDataset, DataLoader, random_split
+ 
 
-# generating the sequences function 
-def sequence_generator(timeseries: np.array, lookback_period: int, pred_length: int): 
+def sequence_generator(timeseries: np.array, lookback_period: int, pred_length: int, label_column: int): 
     """
-    Creates a sequence of labels corresponding the to the lookback_period length 
-    RETURNS A TORCH TENSOR
+    Creates a sequence of features and labels corresponding the to the lookback_period, prediction length and the label column from a time
+    series data. RETURNS A TORCH TENSOR
     """
     features =[] 
     labels = [] 
@@ -20,14 +20,14 @@ def sequence_generator(timeseries: np.array, lookback_period: int, pred_length: 
         label_index_end = label_index_start + pred_length 
         if label_index_end >= len(timeseries) : break 
         feature_sequence = timeseries[i:feature_index_end,:]
-        label_sequence = timeseries[label_index_start:label_index_end,3]  
+        label_sequence = timeseries[label_index_start:label_index_end, label_column]  
         features.append(feature_sequence) 
         labels.append(label_sequence) 
     features = np.array(features)  #convert the list to a numpy aray instead of having a list of arrays in which conversion to a tensor will be slow
     labels = np.array(labels) 
     return torch.Tensor(features), torch.Tensor(labels) 
+ 
 
-# creating the training, validation, and testing split 
 def train_valid_test_split(features: torch.Tensor, labels: torch.Tensor, train_percent: int,
                                  valid_percent: int, test_percent: int): 
     """
@@ -42,7 +42,7 @@ def train_valid_test_split(features: torch.Tensor, labels: torch.Tensor, train_p
     testing_dataset = TensorDataset(features[train_size + valid_size:, :, :], labels[train_size + valid_size:, :]) 
     return train_dataset, validation_dataset, testing_dataset  
 
-# creating dataloaders 
+ 
 def create_dataloaders(train_dataset, valid_dataset, test_dataset, batch_size: int): 
     """
     Creates dataloaders from a subset object according to specified training, validation and testing sizes and batch size 

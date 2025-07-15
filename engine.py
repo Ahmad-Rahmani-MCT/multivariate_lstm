@@ -92,6 +92,9 @@ def test_step(model: nn.Module, dataloader: DataLoader, loss_fn: nn.Module):
     model.eval() 
     #setup test loss values
     test_loss = 0.0 
+    # prediction and testing lists
+    predictions = [] 
+    tests = []
     #turn on inference context manager 
     with torch.inference_mode(): 
         #loop through the dataloader 
@@ -102,7 +105,10 @@ def test_step(model: nn.Module, dataloader: DataLoader, loss_fn: nn.Module):
             # calculate and accumulate loss 
             loss = loss_fn(y_test_valid, y) 
             test_loss += loss.item() 
+            #updating the list
+            predictions.append(y_test_valid) 
+            tests.append(y) 
     #adjusting the metrics 
     test_loss = test_loss / len(dataloader) #average
     print('Test Loss: ', test_loss)
-    return test_loss
+    return test_loss, torch.cat(predictions, dim=0), torch.cat(tests, dim=0) 
